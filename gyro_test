@@ -1,0 +1,84 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_L3GD20.h>
+
+#define GYRO_CS 4 // labeled CS
+#define GYRO_DO 5 // labeled SA0
+#define GYRO_DI 6  // labeled SDA
+#define GYRO_CLK 7 // labeled SCL
+Adafruit_L3GD20 gyro(GYRO_CS, GYRO_DO, GYRO_DI, GYRO_CLK);
+
+float gyroPitch;
+float gyroRoll;
+float gyroYaw;
+float newTime;
+float oldTime;
+float pitchBias;
+float rollBias;
+float yawBias;
+boolean firstTime = 1;
+float lastPitchRate;
+float currentPitchRate;
+float lastRollRate;
+float currentRollRate;
+float lastYawRate;
+float currentYawRate;
+float pitchRate;
+float rollRate;
+float yawRate;
+
+void setup() {
+  Serial.begin(9600);
+  gyro.begin(gyro.L3DS20_RANGE_500DPS);
+
+  int N = 100;
+  for (int i = 0; i < N; i++) {
+    gyro.read();
+    pitchBias += gyro.data.x;
+    rollBias += gyro.data.y;
+    yawBias += gyro.data.z;
+  }
+
+  pitchBias /= (float) N;
+  rollBias /= (float) N;
+  yawBias /= (float) N;  
+ 
+  Serial.print(pitchBias);
+  Serial.print("  ");
+  Serial.print(rollBias);
+  Serial.print("  ");
+  Serial.print(yawBias);
+  Serial.println();
+}
+
+void loop() {
+  if (firstTime) {
+    oldTime = millis();
+    newTime = millis();
+    firstTime = 0;
+    return;
+  }
+  gyro.read();
+  newTime = millis();
+  float dtSec = ((newTime - oldTime) / 1000.0);
+
+  currentPitchRate = (gyro.data.x - pitchBias);
+  currentRollRate = (gyro.data.y  - rollBias);
+  currentYawRate = (gyro.data.z  - yawBias);
+
+  pitchRate = (lastPitchRate + currentPitchRate) / 2;
+  rollRate = (lastRollRate + currentRollRate) / 2;
+  yawRate = (lastYawRate + currentYawRate) / 2;
+  
+  gyroPitch += (pitchRate * dtSec);
+  Serial.print("Pitch degrees: "); Serial.print(gyroPitch, 3); Serial.print(" Pitch Rate: "); Serial.print(pitchRate); Serial.print(" ");
+  gyroRoll += (rollRate * dtSec);
+  Serial.print("  Roll degrees: "); Serial.print(gyroRoll, 3); Serial.print(" Roll Rate: "); Serial.print(rollRate); Serial.print(" ");
+  gyroYaw += (yawRate * dtSec);
+  Serial.print("  Yaw degrees: "); Serial.print(gyroYaw, 3); Serial.print(" Yaw Rate: "); Serial.print(yawRate);
+  Serial.println();
+  lastPitchRate = currentPitchRate;
+  lastRollRate = currentRollRate;
+  lastYawRate = currentYawRate;
+  oldTime = newTime;
+}
