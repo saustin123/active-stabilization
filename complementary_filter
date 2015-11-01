@@ -1,0 +1,141 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_L3GD20.h>
+#include <Adafruit_MMA8451.h>
+#define RAD_DEG 57.295779 //Convert from radians to degrees
+#define TAU 0.05
+
+Adafruit_MMA8451 mma = Adafruit_MMA8451();
+
+#define GYRO_CS 4 // labeled CS
+#define GYRO_DO 5 // labeled SA0
+#define GYRO_DI 6  // labeled SDA
+#define GYRO_CLK 7 // labeled SCL
+Adafruit_L3GD20 gyro(GYRO_CS, GYRO_DO, GYRO_DI, GYRO_CLK);
+
+float rollAcc; //Accelerometer variables
+float pitchAcc;
+float gz;
+
+float pitchGyro; //Gyro variables
+float rollGyro;
+float yawGyro;
+float newTime;
+float oldTime;
+float pitchBias;
+float rollBias;
+float yawBias;
+boolean firstTime = 1;
+float lastPitchRate;
+float currentPitchRate;
+float lastRollRate;
+float currentRollRate;
+float lastYawRate;
+float currentYawRate;
+float pitchRate;
+float rollRate;
+float yawRate;
+float dtSec;
+
+float rollComplementary; //Complementary filter variables
+float pitchComplementary;
+
+void setup() {
+  Serial.begin(9600);
+  mma.begin();
+  gyro.begin(gyro.L3DS20_RANGE_500DPS);
+  mma.setRange(MMA8451_RANGE_8_G);
+
+  int N = 100;
+  for (int i = 0; i < N; i++) {
+    gyro.read();
+    pitchBias += gyro.data.x;
+    rollBias += gyro.data.y;
+    yawBias += gyro.data.z;
+  }
+
+  pitchBias /= (float) N;
+  rollBias /= (float) N;
+  yawBias /= (float) N;  
+ 
+  Serial.print(pitchBias);
+  Serial.print("  ");
+  Serial.print(rollBias);
+  Serial.print("  ");
+  Serial.print(yawBias);
+  Serial.println();
+}
+
+void getGyroAngle() {
+   if (firstTime) {
+    oldTime = millis();
+    newTime = millis();
+    firstTime = 0;
+    return;
+  }
+  gyro.read();
+  newTime = millis();
+  dtSec = ((newTime - oldTime) / 1000.0);
+
+  currentPitchRate = (gyro.data.x - pitchBias);
+  currentRollRate = (gyro.data.y  - rollBias);
+  currentYawRate = (gyro.data.z  - yawBias);
+
+  pitchRate = (lastPitchRate + currentPitchRate) / 2;
+  rollRate = (lastRollRate + currentRollRate) / 2;
+  yawRate = (lastYawRate + currentYawRate) / 2;
+ 
+  pitchGyro += (pitchRate * dtSec);
+  rollGyro += (rollRate * dtSec);
+  yawGyro += (yawRate * dtSec);
+  
+  lastPitchRate = currentPitchRate;
+  lastRollRate = currentRollRate;
+  lastYawRate = currentYawRate;
+  oldTime = newTime;
+}
+
+void getAccAngle() {
+  sensors_event_t event;
+  mma.getEvent(&event);
+  
+  float insideSqrt = 1-(event.acceleration.x * event.acceleration.x) - (event.acceleration.y * event.acceleration.y);
+  if(insideSqrt < 0) {
+    insideSqrt = 0;
+  }
+  
+  gz = sqrt(insideSqrt);
+
+  rollAcc = atan2(event.acceleration.y, gz) * RAD_DEG;
+  pitchAcc =  atan2(event.acceleration.x, gz) * RAD_DEG;
+}
+
+void loop() {
+ getGyroAngle();
+ getAccAngle();
+ 
+ float a = TAU / (TAU + dtSec);
+
+ rollComplementary = (a * rollGyro) + ((1-a) * pitchAcc);
+ pitchComplementary = (a * -pitchGyro) + ((1-a) * rollAcc);
+
+ if(rollComplementary > 90) {
+  rollComplementary = 90;
+ } else if(rollComplementary < -90) {
+  rollComplementary = -90;
+ }
+
+if(pitchComplementary > 90) {
+  pitchComplementary = 90;
+ } else if(pitchComplementary < -90) {
+  pitchComplementary = -90;
+ }
+
+ Serial.print(rollComplementary);
+ Serial.print("  ");
+ Serial.print(pitchComplementary);
+ Serial.print("  ");
+ Serial.print(a);
+ Serial.println();
+ 
+}
