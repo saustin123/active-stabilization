@@ -1,0 +1,46 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_MMA8451.h>
+
+#define RAD_DEG 57.295779
+
+Adafruit_MMA8451 mma = Adafruit_MMA8451();
+
+double rollAcc;
+double pitchAcc;
+double gravityVector2;
+
+void setup() {
+  Serial.begin(9600);
+  mma.begin();
+  mma.setRange(MMA8451_RANGE_8_G);
+}
+
+void getAccAngle() {
+  sensors_event_t event;
+  mma.getEvent(&event);
+  
+  float thingInsideSqrt = 1-(event.acceleration.x * event.acceleration.x) - (event.acceleration.y * event.acceleration.y);
+  if(thingInsideSqrt < 0) {
+    thingInsideSqrt = 0;
+  }
+  double gz = sqrt(thingInsideSqrt);
+
+  rollAcc = atan2(event.acceleration.y, gz) * RAD_DEG;
+  pitchAcc =  atan2(event.acceleration.x, gz) * RAD_DEG;
+
+  gravityVector2 = sqrt((event.acceleration.x * event.acceleration.x) + (event.acceleration.y * event.acceleration.y) + (gz * gz));
+}
+
+void loop() {
+getAccAngle();
+Serial.print("Roll: ");
+Serial.print(rollAcc, 3);
+Serial.print(" ");
+Serial.print("Pitch: ");
+Serial.print(pitchAcc, 3);
+Serial.print(" ");
+Serial.print("gz: ");
+Serial.print(gravityVector2, 3);
+Serial.println();
+}
